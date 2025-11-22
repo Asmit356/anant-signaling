@@ -11,6 +11,16 @@ const io = new Server(server, {
     }
 });
 
+/* ---------------------------------------
+   FIX 1 → Add route for / (IMPORTANT!)
+----------------------------------------*/
+app.get("/", (req, res) => {
+    res.send("🚀 Anant Kripa Signaling Server is running!");
+});
+
+/* ---------------------------------------
+   SOCKET.IO HANDLERS
+----------------------------------------*/
 io.on("connection", (socket) => {
     console.log("A user connected:", socket.id);
 
@@ -32,6 +42,9 @@ io.on("connection", (socket) => {
     });
 });
 
+/* ---------------------------------------
+   FIX 2 → Render uses dynamic PORT
+----------------------------------------*/
 const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => {
     console.log("🚀 Signaling server running on port", PORT);
