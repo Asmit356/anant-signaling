@@ -9,15 +9,16 @@
   body { margin:0; font-family:Inter, system-ui, Arial; background:linear-gradient(180deg,#041022,#0f1724); color:#fff; height:100vh; overflow:hidden; }
   .topbar{position:fixed;left:0;right:0;top:0;height:56px;display:flex;align-items:center;gap:12px;padding:8px 16px;background:linear-gradient(90deg, rgba(0,0,0,0.45), transparent);z-index:40}
   .logo{font-weight:700;color:var(--accent)}
-  #videos { position:absolute; inset:56px 0 80px 0; display:grid; gap:8px; padding:12px; box-sizing:border-box; grid-auto-rows:1fr; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  #videos { position:absolute; inset:56px 260px 80px 0; display:grid; gap:8px; padding:12px; box-sizing:border-box; grid-auto-rows:1fr; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
   .video-card { position:relative; background:#000; border-radius:12px; overflow:hidden; display:flex; align-items:center; justify-content:center; }
   video { width:100%; height:100%; object-fit:cover; background:#000; }
-  .badge { position:absolute; top:8px; left:8px; background:#0008; padding:6px 10px; border-radius:999px; font-size:13px; }
+  .badge { position:absolute; top:8px; left:8px; background:#0008; padding:6px 10px; border-radius:999px; font-size:13px; display:flex; gap:8px; align-items:center; }
+  .host-badge { background: linear-gradient(90deg,#ffb86b,#ff6a00); color:#111; padding:6px 10px; border-radius:999px; font-weight:700; }
   #bottomBar { position:fixed; left:50%; transform:translateX(-50%); bottom:16px; background:#08101a80; padding:10px 14px; border-radius:40px; display:flex; gap:12px; z-index:50; align-items:center; }
   .btn { background:var(--accent); border:0; padding:10px 12px; border-radius:999px; cursor:pointer; color:#fff; font-weight:700; }
-  .icon-btn { width:48px;height:48px;border-radius:24px;background:#111;display:flex;align-items:center;justify-content:center;cursor:pointer; }
+  .icon-btn { width:48px;height:48px;border-radius:24px;background:#111;display:flex;align-items:center;justify-content:center;cursor:pointer; color:#fff; font-size:18px; }
   #chat { position:fixed; right:12px; bottom:90px; width:320px; max-height:60vh; background:rgba(0,0,0,0.45); border-radius:12px; overflow:hidden; display:flex; flex-direction:column; z-index:60; }
-  #chat .messages { padding:12px; overflow:auto; flex:1; }
+  #chat .messages { padding:12px; overflow:auto; flex:1; font-size:14px; }
   #chat .input { display:flex; gap:8px; padding:8px; }
   #chat input{flex:1;padding:8px;border-radius:8px;border:0}
   #emojiPanel { position:fixed; left:12px; bottom:90px; display:flex; gap:8px; z-index:60; }
@@ -26,6 +27,14 @@
   /* donate modal */
   .modal-bg { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,0.6); z-index:9999; }
   .modal { background:#fff; color:#111; padding:18px; border-radius:12px; width:320px; text-align:center; }
+  /* participants sidebar */
+  #participants { position:fixed; right:0; top:56px; width:260px; bottom:80px; background:rgba(5,8,15,0.85); border-left:1px solid rgba(255,255,255,0.03); padding:12px; overflow:auto; z-index:70; }
+  #participants h3{ margin:0 0 8px 0; font-size:16px; color:#fff; }
+  .participant { padding:8px 10px; border-radius:8px; display:flex; justify-content:space-between; gap:8px; align-items:center; margin-bottom:8px; background:rgba(255,255,255,0.02); }
+  .waiting-box { position:fixed; left:50%; top:70px; transform:translateX(-50%); z-index:90; background:#0b1220; color:#fff; padding:12px; border-radius:10px; box-shadow:0 8px 20px rgba(0,0,0,0.5); display:none; }
+  .small-btn { background:#222; border:0; color:#fff; padding:6px 8px; border-radius:6px; cursor:pointer; }
+  /* ended overlay */
+  #endedOverlay { position:fixed; inset:0; background:rgba(0,0,0,0.85); color:#fff; display:none; align-items:center; justify-content:center; z-index:99999; font-size:22px; text-align:center; padding:20px; }
 </style>
 </head>
 <body>
@@ -36,6 +45,12 @@
 </div>
 
 <div id="videos"></div>
+
+<!-- Participants sidebar -->
+<div id="participants">
+  <h3>👥 Participants</h3>
+  <div id="usersList"></div>
+</div>
 
 <div id="emojiPanel">
   <button class="icon-btn" title="Diya" onclick="localEmoji('🪔')">🪔</button>
@@ -71,6 +86,17 @@
   </div>
 </div>
 
+<!-- waiting box for host -->
+<div class="waiting-box" id="waitingBox">
+  <div id="waitingText">Users waiting: <span id="waitingCount">0</span></div>
+  <div style="margin-top:8px;">
+    <button class="small-btn" onclick="approveAll()">Approve All</button>
+  </div>
+</div>
+
+<!-- ended overlay -->
+<div id="endedOverlay">❌ The host has ended the meeting. Thank you.</div>
+
 <!-- hidden file input for screenshot upload -->
 <input type="file" id="ssFile" accept="image/*" style="display:none" />
 
@@ -78,55 +104,82 @@
 <script src="https://unpkg.com/simple-peer@9.11.1/simplepeer.min.js"></script>
 
 <script>
-/* ====== config ====== */
+/* ====== CONFIG & PARAMS ====== */
 const urlParams = new URLSearchParams(window.location.search);
 const ROOM = (urlParams.get('room') || 'room-default').replace(/\s+/g,'-');
 const NAME = urlParams.get('name') || ('Guest' + Math.floor(Math.random()*999));
-const SERVER = location.origin; // same origin (render domain)
+const IS_HOST = (urlParams.get('host') === '1' || urlParams.get('host') === 'true');
+const SERVER = location.origin; // Render app origin
 document.getElementById('roomLabel').textContent = 'Room: ' + ROOM;
 
 const ICE_SERVERS = (function(){
   try { return JSON.parse(decodeURIComponent(urlParams.get('ice') || '')) } catch(e){ return (window.__ICE || []) }
 })();
 
+/* ====== SOCKET & STATE ====== */
 const socket = io(SERVER, { transports: ['websocket','polling'] });
 
 let localStream = null;
-let peers = {}; // peerId -> SimplePeer instance
-let peerVideoEls = {}; // peerId -> video element
-let recordings = [];
+let peers = {};             // peerId -> SimplePeer
+let peerVideoEls = {};      // peerId -> element
+let peerNames = {};         // peerId -> {name, isHost}
 let mediaRecorder = null;
 let recordedChunks = [];
 
-/* ====== init local media ====== */
+/* ====== UI helpers ====== */
+function showEndedOverlay(){ document.getElementById('endedOverlay').style.display = 'flex'; }
+function hideEndedOverlay(){ document.getElementById('endedOverlay').style.display = 'none'; }
+
+/* ====== local media ====== */
 async function initLocal() {
   try {
     localStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:true });
-    addVideoEl('local', localStream, NAME + ' (you)', true);
+    addVideoEl('local', localStream, NAME + (IS_HOST ? ' (Host)' : ' (You)'), true, IS_HOST);
   } catch(err) {
     console.error('getUserMedia error', err);
     alert('Camera/mic access required to join.');
   }
 }
 
-/* ====== socket events ====== */
+/* ====== socket flow ====== */
+
+// On connect, if host → directly join room, else request approval
 socket.on('connect', () => {
-  console.log('connected', socket.id);
-  socket.emit('join-room', { room: ROOM, userName: NAME });
+  console.log('connected', socket.id, 'host?', IS_HOST);
+  if (IS_HOST) {
+    socket.emit('join-room', { room: ROOM, userName: NAME, host: true });
+    // request current users list (server may not provide; peer-joined events will come)
+  } else {
+    // ask to join (waiting room)
+    socket.emit('join-request', { room: ROOM, userName: NAME });
+  }
 });
 
+// When server returns peers list (could be array of ids OR array of objects with metadata)
 socket.on('peers', async (others) => {
-  // create peers to others
-  for (const id of others) {
+  // handle both shapes: ["id1","id2"] OR [{id,name,isHost}, ...]
+  const ids = [];
+  if (!Array.isArray(others)) return;
+  for (const o of others) {
+    if (typeof o === 'string') ids.push(o);
+    else if (o && o.id) {
+      ids.push(o.id);
+      peerNames[o.id] = { name: o.userName || o.name || 'Participant', isHost: !!o.isHost };
+    }
+  }
+  for (const id of ids) {
     await preparePeer(id, true);
   }
 });
 
-socket.on('peer-joined', async ({ id, userName }) => {
-  // create peer to new someone
+// server notifies when someone joined after you
+socket.on('peer-joined', async ({ id, userName, isHost }) => {
+  peerNames[id] = { name: userName || 'Participant', isHost: !!isHost };
   await preparePeer(id, false);
+  updateUsersList();
 });
 
+// server sends signal messages
 socket.on('signal', async ({ from, data }) => {
   if (peers[from]) {
     peers[from].signal(data);
@@ -136,42 +189,87 @@ socket.on('signal', async ({ from, data }) => {
   }
 });
 
+// peer left
 socket.on('peer-left', ({ id }) => {
   removePeer(id);
+  delete peerNames[id];
+  updateUsersList();
 });
 
-/* chat & emoji */
-socket.on('chat-message', ({ from, message, name, ts }) => {
-  appendChat(name || from, message);
-});
-socket.on('emoji', ({ emoji, from }) => {
-  showFloatingEmoji(emoji);
+// waiting room - host receives list
+socket.on('waiting-user', (list) => {
+  // list is array of {id,name}
+  const box = document.getElementById('waitingBox');
+  const cnt = (list && list.length) || 0;
+  document.getElementById('waitingCount').textContent = cnt;
+  if (IS_HOST && cnt > 0) {
+    box.style.display = 'block';
+  } else {
+    box.style.display = 'none';
+  }
 });
 
-/* ====== peer setup ====== */
+// approved to join (guest)
+socket.on('approved', (room) => {
+  if (room === ROOM) {
+    // now officially join the room
+    socket.emit('join-room', { room: ROOM, userName: NAME });
+  }
+});
+
+// meeting ended -> everyone
+socket.on('meeting-ended', () => {
+  // gracefully stop local media
+  if (localStream) {
+    localStream.getTracks().forEach(t => t.stop());
+  }
+  // show overlay and disconnect
+  showEndedOverlay();
+  setTimeout(() => {
+    try { socket.disconnect(); } catch(e){ }
+    // optionally redirect to homepage
+    // window.location.href = 'https://anantkripa.in';
+  }, 1500);
+});
+
+/* ====== prepare peer (simple-peer) ====== */
 async function preparePeer(peerId, initiator=false, incomingSignal=null) {
   if (peers[peerId]) return;
-  const p = new SimplePeer({ initiator, trickle: true, stream: localStream, config: { iceServers: ICE_SERVERS.length ? ICE_SERVERS : [{ urls: 'stun:stun.l.google.com:19302' }] } });
+  const iceConfig = ICE_SERVERS && ICE_SERVERS.length ? ICE_SERVERS : [{ urls: 'stun:stun.l.google.com:19302' }];
+  const p = new SimplePeer({ initiator, trickle: true, stream: localStream, config: { iceServers: iceConfig } });
   peers[peerId] = p;
 
+  // when this client generates signaling data
   p.on('signal', data => {
-    socket.emit('signal', { to: peerId, from: socket.id, data });
+    socket.emit('signal', { to: peerId, data });
   });
 
+  // remote stream received
   p.on('stream', stream => {
-    addVideoEl(peerId, stream, 'Participant', false);
+    const info = peerNames[peerId] || { name: 'Participant', isHost: false };
+    addVideoEl(peerId, stream, info.name + (info.isHost ? ' (Host)' : ''), false, info.isHost);
+    updateUsersList();
   });
 
   p.on('close', () => { removePeer(peerId); });
   p.on('error', e => { console.warn('peer error', e); removePeer(peerId); });
 
-  if (incomingSignal) {
-    p.signal(incomingSignal);
-  }
+  if (incomingSignal) p.signal(incomingSignal);
 }
 
-/* ====== video element management ====== */
-function addVideoEl(id, stream, label, muted=false) {
+/* ====== add / remove video elements ====== */
+function addVideoEl(id, stream, label, muted=false, isHost=false) {
+  // if element exists, update stream
+  const existing = document.getElementById('card-' + id);
+  if (existing) {
+    const vid = existing.querySelector('video');
+    if (vid) vid.srcObject = stream;
+    const badge = existing.querySelector('.badge');
+    if (badge) badge.innerHTML = getBadgeHtml(label, isHost);
+    peerVideoEls[id] = existing;
+    return;
+  }
+
   const videos = document.getElementById('videos');
   const card = document.createElement('div');
   card.className = 'video-card';
@@ -185,27 +283,33 @@ function addVideoEl(id, stream, label, muted=false) {
 
   const badge = document.createElement('div');
   badge.className = 'badge';
-  badge.textContent = label;
+  badge.innerHTML = getBadgeHtml(label, isHost);
 
   card.appendChild(vid);
   card.appendChild(badge);
   videos.appendChild(card);
-
   peerVideoEls[id] = card;
+}
+
+function getBadgeHtml(label, isHost) {
+  if (isHost) {
+    return `<span class="host-badge">Host</span> <span style="margin-left:8px">${escapeHtml(label)}</span>`;
+  }
+  return `<span>${escapeHtml(label)}</span>`;
 }
 
 function removePeer(id) {
   const el = document.getElementById('card-' + id);
   if (el) el.remove();
-  if (peers[id]) { peers[id].destroy(); delete peers[id]; }
+  if (peers[id]) { try { peers[id].destroy(); } catch(e){} delete peers[id]; }
   delete peerVideoEls[id];
 }
 
-/* ====== chat ====== */
+/* ====== Chat ====== */
 document.getElementById('sendChat').addEventListener('click', () => {
   const v = document.getElementById('chatInput').value.trim();
   if (!v) return;
-  socket.emit('send-chat', { room: ROOM, message: v, name: NAME });
+  socket.emit('send-chat', { room: ROOM, message: v });
   appendChat(NAME, v);
   document.getElementById('chatInput').value = '';
 });
@@ -218,9 +322,8 @@ function appendChat(name, msg) {
   wrap.scrollTop = wrap.scrollHeight;
 }
 
-/* ====== emoji functions ====== */
+/* ====== emoji ====== */
 function localEmoji(emoji) {
-  // show locally and notify server
   showFloatingEmoji(emoji);
   socket.emit('emoji', { room: ROOM, emoji });
 }
@@ -253,7 +356,6 @@ function toggleMic(){
   audioTrack.enabled = !audioTrack.enabled;
   document.getElementById('btnMic').textContent = audioTrack.enabled ? '🎤' : '🔇';
 }
-
 function toggleCam(){
   if(!localStream) return;
   const videoTrack = localStream.getVideoTracks()[0];
@@ -261,21 +363,17 @@ function toggleCam(){
   videoTrack.enabled = !videoTrack.enabled;
   document.getElementById('btnCam').textContent = videoTrack.enabled ? '📷' : '🚫';
 }
-
 async function startScreen(){
   try {
     const s = await navigator.mediaDevices.getDisplayMedia({video:true});
-    // replace video track in peers
     const screenTrack = s.getVideoTracks()[0];
     for(const id in peers) {
       const p = peers[id];
       const sender = p._pc && p._pc.getSenders().find(s => s.track && s.track.kind === 'video');
       if (sender) sender.replaceTrack(screenTrack);
     }
-    // show local screen in a small element
-    addVideoEl('screen-local', s, NAME + ' (screen)', true);
+    addVideoEl('screen-local', s, NAME + ' (screen)', true, false);
     screenTrack.onended = () => {
-      // restore camera
       const camTrack = localStream.getVideoTracks()[0];
       for(const id in peers) {
         const p = peers[id];
@@ -292,16 +390,12 @@ async function startScreen(){
 
 /* ====== local recording ====== */
 function toggleRecord(){
-  if (!mediaRecorder || mediaRecorder.state === 'inactive') {
-    startRecording();
-  } else {
-    stopRecording();
-  }
+  if (!mediaRecorder || mediaRecorder.state === 'inactive') startRecording();
+  else stopRecording();
 }
 function startRecording(){
   if (!localStream) return alert('No local stream');
   const combined = new MediaStream();
-  // add local tracks (you can customize to record mixed remote streams in advanced setups)
   localStream.getTracks().forEach(t => combined.addTrack(t));
   mediaRecorder = new MediaRecorder(combined, { mimeType: 'video/webm; codecs=vp8' });
   recordedChunks = [];
@@ -315,7 +409,6 @@ function startRecording(){
   mediaRecorder.start();
   document.getElementById('btnRecord').textContent = '⏹️';
 }
-
 function stopRecording(){
   if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
   document.getElementById('btnRecord').textContent = '⏺️';
@@ -327,11 +420,10 @@ document.getElementById('ssFile').addEventListener('change', (e) => {
   if (!f) return;
   uploadScreenshotFile(f);
 });
-
 async function uploadScreenshotFile(file) {
   const fd = new FormData();
   fd.append('screenshot', file);
-  // change path to your PHP endpoint on Hostinger
+  fd.append('room', ROOM);
   const res = await fetch('https://anantkripa.in/upload_screenshot.php', {
     method: 'POST', body: fd, credentials: 'include'
   });
@@ -340,15 +432,50 @@ async function uploadScreenshotFile(file) {
   else alert('Upload failed');
 }
 
+/* ====== waiting room actions (host) ====== */
+function approveAll(){
+  socket.emit('approve-all', ROOM);
+  document.getElementById('waitingBox').style.display = 'none';
+}
+
+/* ====== participant list update ====== */
+function updateUsersList(){
+  const wrap = document.getElementById('usersList');
+  wrap.innerHTML = '';
+  // local first
+  const localHtml = `<div class="participant"><div><b>${escapeHtml(NAME)}</b> <div style="font-size:12px;color:#bbb">You${IS_HOST? ' • Host':''}</div></div><div></div></div>`;
+  wrap.insertAdjacentHTML('beforeend', localHtml);
+  // other peers
+  for (const id in peerNames) {
+    const info = peerNames[id] || { name: id, isHost:false };
+    const label = escapeHtml(info.name) + (info.isHost ? ' (Host)' : '');
+    wrap.insertAdjacentHTML('beforeend', `<div class="participant"><div>${label}</div><div></div></div>`);
+  }
+}
+
 /* ====== helpers ====== */
-function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>'&#'+c.charCodeAt(0)+';'); }
+function escapeHtml(s){ if(!s) return ''; return String(s).replace(/[&<>"']/g, c=>'&#'+c.charCodeAt(0)+';'); }
 
 /* ====== start everything ====== */
 (async function(){
-  // Try to accept ICE via global window var for Render deployment
   window.__ICE = window.__ICE || (typeof __ICE !== 'undefined' ? __ICE : []);
-  // initialize local stream
   await initLocal();
+  // If guest, show a small notice while waiting (optional)
+  if (!IS_HOST) {
+    const notice = document.createElement('div');
+    notice.style.position='fixed';
+    notice.style.left='50%'; notice.style.top='64px';
+    notice.style.transform='translateX(-50%)';
+    notice.style.background='#111'; notice.style.color='#fff';
+    notice.style.padding='8px 12px'; notice.style.borderRadius='8px';
+    notice.style.zIndex=90;
+    notice.id='waitingNotice';
+    notice.textContent = 'Waiting for host approval...';
+    document.body.appendChild(notice);
+  }
+
+  // update users list periodically (some peers names arrive later)
+  setInterval(updateUsersList, 1200);
 })();
 </script>
 </body>
