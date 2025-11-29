@@ -1,51 +1,70 @@
-const express = require("express");
-const http = require("http");
-const { Server } = require("socket.io");
+require('dotenv').config();
+const express = require('express');
+const http = require('http');
+const cors = require('cors');
+const { Server } = require('socket.io');
 
 const app = express();
+app.use(cors());
+app.use(express.static('public'));
+app.use(express.json());
+
 const server = http.createServer(app);
 const io = new Server(server, {
-    cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-    }
+  cors: {
+    origin: process.env.FRONTEND_ORIGIN || '*',
+    methods: ['GET','POST']
+  }
 });
 
-/* ---------------------------------------
-   FIX 1 → Add route for / (IMPORTANT!)
-----------------------------------------*/
-app.get("/", (req, res) => {
-    res.send("🚀 Anant Kripa Signaling Server is running!");
-});
+// In-memory rooms -> participants (simple)
+const rooms = {}; // { roomName: { socketId: userId, ... } }
 
-/* ---------------------------------------
-   SOCKET.IO HANDLERS
-----------------------------------------*/
-io.on("connection", (socket) => {
-    console.log("A user connected:", socket.id);
+io.on('connection', socket => {
+  console.log('socket connected', socket.id);
 
-    socket.on("join-room", (room) => {
-        socket.join(room);
-        socket.to(room).emit("user-joined", socket.id);
+  socket.on('join-room', ({ room, userName }) => {
+    socket.join(room);
+    socket.data.userName = userName || 'Guest';
+    // notify existing peers
+    const clients = Array.from(io.sockets.adapter.rooms.get(room) || []);
+    // send peers list to caller
+    const otherClients = clients.filter(id => id !== socket.id);
+    socket.emit('peers', otherClients);
+    // notify others that a new peer joined
+    socket.to(room).emit('peer-joined', { id: socket.id, userName: socket.data.userName });
+    console.log(`${socket.id} joined ${room}`);
+  });
+
+  // signaling: offer, answer, ice-candidate
+  socket.on('signal', ({ to, from, data }) => {
+    if (!to) return;
+    io.to(to).emit('signal', { from, data });
+  });
+
+  socket.on('send-chat', ({ room, message, name }) => {
+    io.to(room).emit('chat-message', { from: socket.id, message, name, ts: Date.now() });
+  });
+
+  socket.on('emoji', ({ room, emoji }) => {
+    io.to(room).emit('emoji', { emoji, from: socket.id });
+  });
+
+  socket.on('disconnecting', () => {
+    const roomsJoined = Array.from(socket.rooms).filter(r => r !== socket.id);
+    roomsJoined.forEach(room => {
+      socket.to(room).emit('peer-left', { id: socket.id });
     });
+  });
 
-    socket.on("signal", (data) => {
-        io.to(data.to).emit("signal", {
-            from: data.from,
-            signal: data.signal
-        });
-    });
-
-    socket.on("disconnect", () => {
-        console.log("User disconnected:", socket.id);
-        socket.broadcast.emit("user-left", socket.id);
-    });
+  socket.on('disconnect', () => {
+    console.log('socket disconnected', socket.id);
+  });
 });
 
-/* ---------------------------------------
-   FIX 2 → Render uses dynamic PORT
-----------------------------------------*/
-const PORT = process.env.PORT || 10000;
-server.listen(PORT, () => {
-    console.log("🚀 Signaling server running on port", PORT);
-});
+// Health
+app.get('/health', (req, res) => res.json({ ok: true }));
+
+// Serve on port
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => console.log(`Server listening on ${PORT}`));
