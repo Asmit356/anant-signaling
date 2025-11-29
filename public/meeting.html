@@ -1,71 +1,355 @@
-require('dotenv').config();
-const express = require('express');
-const http = require('http');
-const cors = require('cors');
-const { Server } = require('socket.io');
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>AnantKripa Meeting</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  :root { --accent:#ff6600; --bg:#0f1724; --card:#0b1220; color-scheme: dark; }
+  body { margin:0; font-family:Inter, system-ui, Arial; background:linear-gradient(180deg,#041022,#0f1724); color:#fff; height:100vh; overflow:hidden; }
+  .topbar{position:fixed;left:0;right:0;top:0;height:56px;display:flex;align-items:center;gap:12px;padding:8px 16px;background:linear-gradient(90deg, rgba(0,0,0,0.45), transparent);z-index:40}
+  .logo{font-weight:700;color:var(--accent)}
+  #videos { position:absolute; inset:56px 0 80px 0; display:grid; gap:8px; padding:12px; box-sizing:border-box; grid-auto-rows:1fr; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .video-card { position:relative; background:#000; border-radius:12px; overflow:hidden; display:flex; align-items:center; justify-content:center; }
+  video { width:100%; height:100%; object-fit:cover; background:#000; }
+  .badge { position:absolute; top:8px; left:8px; background:#0008; padding:6px 10px; border-radius:999px; font-size:13px; }
+  #bottomBar { position:fixed; left:50%; transform:translateX(-50%); bottom:16px; background:#08101a80; padding:10px 14px; border-radius:40px; display:flex; gap:12px; z-index:50; align-items:center; }
+  .btn { background:var(--accent); border:0; padding:10px 12px; border-radius:999px; cursor:pointer; color:#fff; font-weight:700; }
+  .icon-btn { width:48px;height:48px;border-radius:24px;background:#111;display:flex;align-items:center;justify-content:center;cursor:pointer; }
+  #chat { position:fixed; right:12px; bottom:90px; width:320px; max-height:60vh; background:rgba(0,0,0,0.45); border-radius:12px; overflow:hidden; display:flex; flex-direction:column; z-index:60; }
+  #chat .messages { padding:12px; overflow:auto; flex:1; }
+  #chat .input { display:flex; gap:8px; padding:8px; }
+  #chat input{flex:1;padding:8px;border-radius:8px;border:0}
+  #emojiPanel { position:fixed; left:12px; bottom:90px; display:flex; gap:8px; z-index:60; }
+  /* floating emoji */
+  .floating-emoji { position:fixed; pointer-events:none; z-index:9999; text-shadow:0 8px 20px rgba(0,0,0,0.35); }
+  /* donate modal */
+  .modal-bg { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,0.6); z-index:9999; }
+  .modal { background:#fff; color:#111; padding:18px; border-radius:12px; width:320px; text-align:center; }
+</style>
+</head>
+<body>
 
-const app = express();
-app.use(cors());
-app.use(express.static('public'));
-app.use(express.json());
+<div class="topbar">
+  <div class="logo">AnantKripa Meet</div>
+  <div id="roomLabel"></div>
+</div>
 
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: process.env.FRONTEND_ORIGIN || '*',
-    methods: ['GET','POST']
+<div id="videos"></div>
+
+<div id="emojiPanel">
+  <button class="icon-btn" title="Diya" onclick="localEmoji('🪔')">🪔</button>
+  <button class="icon-btn" title="Flower" onclick="localEmoji('🌸')">🌸</button>
+  <button class="icon-btn" title="Bell" onclick="localEmoji('🔔')">🔔</button>
+</div>
+
+<div id="chat">
+  <div class="messages" id="messages"></div>
+  <div class="input">
+    <input id="chatInput" placeholder="Type message..." />
+    <button id="sendChat" class="btn">Send</button>
+  </div>
+</div>
+
+<div id="bottomBar">
+  <div class="icon-btn" id="btnMic" onclick="toggleMic()">🎤</div>
+  <div class="icon-btn" id="btnCam" onclick="toggleCam()">📷</div>
+  <div class="icon-btn" id="btnShare" onclick="startScreen()">🖥️</div>
+  <button class="btn" id="btnRecord" onclick="toggleRecord()">⏺️</button>
+  <button class="btn" onclick="openDonate()">Donate</button>
+</div>
+
+<!-- donate modal -->
+<div class="modal-bg" id="donateModal">
+  <div class="modal">
+    <h3>Support AnantKripa</h3>
+    <img src="assets/mobile.png" alt="QR" style="width:220px">
+    <p style="margin-top:8px">Scan QR to donate</p>
+    <div style="margin-top:12px">
+      <button class="btn" onclick="closeDonate()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- hidden file input for screenshot upload -->
+<input type="file" id="ssFile" accept="image/*" style="display:none" />
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="https://unpkg.com/simple-peer@9.11.1/simplepeer.min.js"></script>
+
+<script>
+/* ====== config ====== */
+const urlParams = new URLSearchParams(window.location.search);
+const ROOM = (urlParams.get('room') || 'room-default').replace(/\s+/g,'-');
+const NAME = urlParams.get('name') || ('Guest' + Math.floor(Math.random()*999));
+const SERVER = location.origin; // same origin (render domain)
+document.getElementById('roomLabel').textContent = 'Room: ' + ROOM;
+
+const ICE_SERVERS = (function(){
+  try { return JSON.parse(decodeURIComponent(urlParams.get('ice') || '')) } catch(e){ return (window.__ICE || []) }
+})();
+
+const socket = io(SERVER, { transports: ['websocket','polling'] });
+
+let localStream = null;
+let peers = {}; // peerId -> SimplePeer instance
+let peerVideoEls = {}; // peerId -> video element
+let recordings = [];
+let mediaRecorder = null;
+let recordedChunks = [];
+
+/* ====== init local media ====== */
+async function initLocal() {
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:true });
+    addVideoEl('local', localStream, NAME + ' (you)', true);
+  } catch(err) {
+    console.error('getUserMedia error', err);
+    alert('Camera/mic access required to join.');
+  }
+}
+
+/* ====== socket events ====== */
+socket.on('connect', () => {
+  console.log('connected', socket.id);
+  socket.emit('join-room', { room: ROOM, userName: NAME });
+});
+
+socket.on('peers', async (others) => {
+  // create peers to others
+  for (const id of others) {
+    await preparePeer(id, true);
   }
 });
 
-// In-memory rooms -> participants (simple)
-const rooms = {}; // { roomName: { socketId: userId, ... } }
-
-io.on('connection', socket => {
-  console.log('socket connected', socket.id);
-
-  socket.on('join-room', ({ room, userName }) => {
-    socket.join(room);
-    socket.data.userName = userName || 'Guest';
-    // notify existing peers
-    const clients = Array.from(io.sockets.adapter.rooms.get(room) || []);
-    // send peers list to caller
-    const otherClients = clients.filter(id => id !== socket.id);
-    socket.emit('peers', otherClients);
-    // notify others that a new peer joined
-    socket.to(room).emit('peer-joined', { id: socket.id, userName: socket.data.userName });
-    console.log(`${socket.id} joined ${room}`);
-  });
-
-  // signaling: offer, answer, ice-candidate
-  socket.on('signal', ({ to, from, data }) => {
-    if (!to) return;
-    io.to(to).emit('signal', { from, data });
-  });
-
-  socket.on('send-chat', ({ room, message, name }) => {
-    io.to(room).emit('chat-message', { from: socket.id, message, name, ts: Date.now() });
-  });
-
-  socket.on('emoji', ({ room, emoji }) => {
-    io.to(room).emit('emoji', { emoji, from: socket.id });
-  });
-
-  socket.on('disconnecting', () => {
-    const roomsJoined = Array.from(socket.rooms).filter(r => r !== socket.id);
-    roomsJoined.forEach(room => {
-      socket.to(room).emit('peer-left', { id: socket.id });
-    });
-  });
-
-  socket.on('disconnect', () => {
-    console.log('socket disconnected', socket.id);
-  });
+socket.on('peer-joined', async ({ id, userName }) => {
+  // create peer to new someone
+  await preparePeer(id, false);
 });
 
-// Health
-app.get('/health', (req, res) => res.json({ ok: true }));
+socket.on('signal', async ({ from, data }) => {
+  if (peers[from]) {
+    peers[from].signal(data);
+  } else {
+    // create peer if offer came
+    await preparePeer(from, false, data);
+  }
+});
 
-// Serve on port
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server listening on ${PORT}`));
+socket.on('peer-left', ({ id }) => {
+  removePeer(id);
+});
 
+/* chat & emoji */
+socket.on('chat-message', ({ from, message, name, ts }) => {
+  appendChat(name || from, message);
+});
+socket.on('emoji', ({ emoji, from }) => {
+  showFloatingEmoji(emoji);
+});
+
+/* ====== peer setup ====== */
+async function preparePeer(peerId, initiator=false, incomingSignal=null) {
+  if (peers[peerId]) return;
+  const p = new SimplePeer({ initiator, trickle: true, stream: localStream, config: { iceServers: ICE_SERVERS.length ? ICE_SERVERS : [{ urls: 'stun:stun.l.google.com:19302' }] } });
+  peers[peerId] = p;
+
+  p.on('signal', data => {
+    socket.emit('signal', { to: peerId, from: socket.id, data });
+  });
+
+  p.on('stream', stream => {
+    addVideoEl(peerId, stream, 'Participant', false);
+  });
+
+  p.on('close', () => { removePeer(peerId); });
+  p.on('error', e => { console.warn('peer error', e); removePeer(peerId); });
+
+  if (incomingSignal) {
+    p.signal(incomingSignal);
+  }
+}
+
+/* ====== video element management ====== */
+function addVideoEl(id, stream, label, muted=false) {
+  const videos = document.getElementById('videos');
+  const card = document.createElement('div');
+  card.className = 'video-card';
+  card.id = 'card-' + id;
+
+  const vid = document.createElement('video');
+  vid.autoplay = true;
+  vid.playsinline = true;
+  vid.muted = !!muted;
+  vid.srcObject = stream;
+
+  const badge = document.createElement('div');
+  badge.className = 'badge';
+  badge.textContent = label;
+
+  card.appendChild(vid);
+  card.appendChild(badge);
+  videos.appendChild(card);
+
+  peerVideoEls[id] = card;
+}
+
+function removePeer(id) {
+  const el = document.getElementById('card-' + id);
+  if (el) el.remove();
+  if (peers[id]) { peers[id].destroy(); delete peers[id]; }
+  delete peerVideoEls[id];
+}
+
+/* ====== chat ====== */
+document.getElementById('sendChat').addEventListener('click', () => {
+  const v = document.getElementById('chatInput').value.trim();
+  if (!v) return;
+  socket.emit('send-chat', { room: ROOM, message: v, name: NAME });
+  appendChat(NAME, v);
+  document.getElementById('chatInput').value = '';
+});
+function appendChat(name, msg) {
+  const wrap = document.getElementById('messages');
+  const el = document.createElement('div');
+  el.style.marginBottom = '8px';
+  el.innerHTML = `<b>${escapeHtml(name)}:</b> ${escapeHtml(msg)}`;
+  wrap.appendChild(el);
+  wrap.scrollTop = wrap.scrollHeight;
+}
+
+/* ====== emoji functions ====== */
+function localEmoji(emoji) {
+  // show locally and notify server
+  showFloatingEmoji(emoji);
+  socket.emit('emoji', { room: ROOM, emoji });
+}
+function showFloatingEmoji(emoji) {
+  const el = document.createElement('div');
+  el.className = 'floating-emoji';
+  el.textContent = emoji;
+  const left = (Math.random()*60 + 20) + '%';
+  Object.assign(el.style, {
+    left,
+    bottom: '110px',
+    fontSize: '72px',
+    opacity: '0.75',
+    transform: 'translateY(0)',
+    transition: 'transform 1.8s ease-out, opacity 1.8s ease-out'
+  });
+  document.body.appendChild(el);
+  requestAnimationFrame(() => {
+    el.style.transform = 'translateY(-260px)';
+    el.style.opacity = '0';
+  });
+  setTimeout(()=>el.remove(), 1900);
+}
+
+/* ====== controls: mic/cam/screenshare ====== */
+function toggleMic(){
+  if(!localStream) return;
+  const audioTrack = localStream.getAudioTracks()[0];
+  if(!audioTrack) return;
+  audioTrack.enabled = !audioTrack.enabled;
+  document.getElementById('btnMic').textContent = audioTrack.enabled ? '🎤' : '🔇';
+}
+
+function toggleCam(){
+  if(!localStream) return;
+  const videoTrack = localStream.getVideoTracks()[0];
+  if(!videoTrack) return;
+  videoTrack.enabled = !videoTrack.enabled;
+  document.getElementById('btnCam').textContent = videoTrack.enabled ? '📷' : '🚫';
+}
+
+async function startScreen(){
+  try {
+    const s = await navigator.mediaDevices.getDisplayMedia({video:true});
+    // replace video track in peers
+    const screenTrack = s.getVideoTracks()[0];
+    for(const id in peers) {
+      const p = peers[id];
+      const sender = p._pc && p._pc.getSenders().find(s => s.track && s.track.kind === 'video');
+      if (sender) sender.replaceTrack(screenTrack);
+    }
+    // show local screen in a small element
+    addVideoEl('screen-local', s, NAME + ' (screen)', true);
+    screenTrack.onended = () => {
+      // restore camera
+      const camTrack = localStream.getVideoTracks()[0];
+      for(const id in peers) {
+        const p = peers[id];
+        const sender = p._pc && p._pc.getSenders().find(s => s.track && s.track.kind === 'video');
+        if (sender && camTrack) sender.replaceTrack(camTrack);
+      }
+      const el = document.getElementById('card-screen-local');
+      if (el) el.remove();
+    };
+  } catch(e) {
+    console.warn('screen share denied', e);
+  }
+}
+
+/* ====== local recording ====== */
+function toggleRecord(){
+  if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+    startRecording();
+  } else {
+    stopRecording();
+  }
+}
+function startRecording(){
+  if (!localStream) return alert('No local stream');
+  const combined = new MediaStream();
+  // add local tracks (you can customize to record mixed remote streams in advanced setups)
+  localStream.getTracks().forEach(t => combined.addTrack(t));
+  mediaRecorder = new MediaRecorder(combined, { mimeType: 'video/webm; codecs=vp8' });
+  recordedChunks = [];
+  mediaRecorder.ondataavailable = e => { if (e.data.size) recordedChunks.push(e.data); };
+  mediaRecorder.onstop = () => {
+    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = `${ROOM}_${Date.now()}.webm`; a.click();
+    URL.revokeObjectURL(url);
+  };
+  mediaRecorder.start();
+  document.getElementById('btnRecord').textContent = '⏹️';
+}
+
+function stopRecording(){
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+  document.getElementById('btnRecord').textContent = '⏺️';
+}
+
+/* ====== screenshot upload ====== */
+document.getElementById('ssFile').addEventListener('change', (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  uploadScreenshotFile(f);
+});
+
+async function uploadScreenshotFile(file) {
+  const fd = new FormData();
+  fd.append('screenshot', file);
+  // change path to your PHP endpoint on Hostinger
+  const res = await fetch('https://anantkripa.in/upload_screenshot.php', {
+    method: 'POST', body: fd, credentials: 'include'
+  });
+  const j = await res.json();
+  if (j.success) alert('Uploaded');
+  else alert('Upload failed');
+}
+
+/* ====== helpers ====== */
+function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>'&#'+c.charCodeAt(0)+';'); }
+
+/* ====== start everything ====== */
+(async function(){
+  // Try to accept ICE via global window var for Render deployment
+  window.__ICE = window.__ICE || (typeof __ICE !== 'undefined' ? __ICE : []);
+  // initialize local stream
+  await initLocal();
+})();
+</script>
+</body>
+</html>
