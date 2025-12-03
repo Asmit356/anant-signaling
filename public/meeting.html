@@ -1,537 +1,471 @@
+<!-- public/meeting.html -->
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>AnantKripa Meet — Google Meet Style</title>
+  <title>AnantKripa Meet — Meeting</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <!-- Tailwind CDN (fast dev) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    /* minor custom */
-    body { background: linear-gradient(180deg,#041022,#061027); color: #fff; min-height:100vh; }
-    .video-el { background:#000; border-radius:12px; overflow:hidden; display:flex; align-items:center; justify-content:center; }
+    body { background: linear-gradient(180deg,#041022,#061027); color: #fff; min-height:100vh; font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial; }
+    .video-el { background:#000; border-radius:12px; overflow:hidden; display:flex; align-items:center; justify-content:center; position:relative; }
     video { width:100%; height:100%; object-fit:cover; display:block; }
-    .floating-emoji { position:fixed; pointer-events:none; z-index:9999; text-shadow:0 8px 20px rgba(0,0,0,0.35); transform:translateY(0); transition: transform 1.8s ease-out, opacity 1.8s ease-out; }
-    .glass { background: rgba(10,15,25,0.5); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.03); }
-    /* subtle focus */
-    .control-btn:focus { outline: 2px solid rgba(255,140,0,0.2); outline-offset: 2px; }
+    .floating-emoji { position:fixed; pointer-events:none; z-index:9999; transform:translateY(0); transition: transform 1.8s ease-out, opacity 1.8s ease-out; font-size:64px; }
+    .glass { background: rgba(10,15,25,0.6); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.03); }
   </style>
 </head>
 <body class="antialiased">
 
-  <!-- TOP BAR -->
-  <header class="fixed top-0 left-0 right-0 z-40 h-14 flex items-center px-4 glass">
-    <div class="flex items-center gap-3">
-      <div class="text-2xl">📿</div>
-      <div class="text-lg font-semibold text-orange-400">AnantKripa Meet</div>
-      <div id="roomLabel" class="ml-4 text-sm text-slate-200/80"></div>
-    </div>
-
-    <div class="ml-auto flex items-center gap-3">
-      <button id="btnToggleParticipants" class="px-3 py-1 rounded-md text-sm glass hidden md:inline-flex">Participants</button>
-      <button id="btnToggleChat" class="px-3 py-1 rounded-md text-sm glass">Chat</button>
-      <button id="btnToggleEmoji" class="px-3 py-1 rounded-md text-sm glass">Reactions</button>
-    </div>
-  </header>
-
-  <!-- MAIN AREA -->
-  <main class="pt-16 pb-32">
-    <div class="max-w-7xl mx-auto px-3">
-
-      <!-- big grid area (Google Meet style: main tile on left, others grid on right on large screens; for mobile vertical stack) -->
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-
-        <!-- LEFT: Main / Videos (spans 2 columns on lg) -->
-        <section id="videoArea" class="lg:col-span-2">
-          <div id="videos" class="grid gap-3 grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
-            <!-- video cards appended here -->
-          </div>
-        </section>
-
-        <!-- RIGHT: Sidebar (participants + chat stacked) -->
-        <aside class="space-y-4">
-          <!-- Participants -->
-          <div id="participants" class="glass p-3 rounded-xl max-h-[60vh] overflow-auto hidden md:block">
-            <div class="flex items-center justify-between mb-2">
-              <h3 class="font-semibold">👥 Participants</h3>
-              <span id="participantCount" class="text-sm text-slate-300">0</span>
-            </div>
-            <div id="usersList" class="space-y-2 text-sm"></div>
-          </div>
-
-          <!-- Chat -->
-          <div id="chatPanel" class="glass p-3 rounded-xl max-h-[40vh] overflow-hidden flex flex-col">
-            <div class="flex items-center justify-between mb-2">
-              <h3 class="font-semibold">💬 Chat</h3>
-              <button id="clearChat" class="text-xs text-slate-300">Clear</button>
-            </div>
-            <div id="messages" class="flex-1 overflow-auto text-sm space-y-2 mb-2"></div>
-            <div class="flex gap-2">
-              <input id="chatInput" class="flex-1 p-2 rounded-md text-black" placeholder="Type a message...">
-              <button id="sendChat" class="bg-orange-500 px-3 py-2 rounded-md font-semibold">Send</button>
-            </div>
-          </div>
-
-          <!-- Reactions / Donate / Waiting info -->
-          <div class="glass p-3 rounded-xl space-y-2">
-            <div class="flex items-center justify-between">
-              <h3 class="font-semibold">✨ Reactions</h3>
-              <button id="openDonate" class="text-sm">💚 Donate</button>
-            </div>
-            <div id="emojiPanel" class="flex flex-wrap gap-2">
-              <!-- many emojis -->
-              <button class="px-2 py-1 rounded-md bg-white/5" onclick="localEmoji('🪔')">🪔</button>
-              <button class="px-2 py-1 rounded-md bg-white/5" onclick="localEmoji('🌸')">🌸</button>
-              <button class="px-2 py-1 rounded-md bg-white/5" onclick="localEmoji('🙏')">🙏</button>
-              <button class="px-2 py-1 rounded-md bg-white/5" onclick="localEmoji('🔥')">🔥</button>
-              <button class="px-2 py-1 rounded-md bg-white/5" onclick="localEmoji('🎉')">🎉</button>
-              <button class="px-2 py-1 rounded-md bg-white/5" onclick="localEmoji('✨')">✨</button>
-              <button class="px-2 py-1 rounded-md bg-white/5" onclick="localEmoji('💖')">💖</button>
-              <button class="px-2 py-1 rounded-md bg-white/5" onclick="localEmoji('🌟')">🌟</button>
-              <button class="px-2 py-1 rounded-md bg-white/5" onclick="localEmoji('🔔')">🔔</button>
-              <button class="px-2 py-1 rounded-md bg-white/5" onclick="localEmoji('🤝')">🤝</button>
-              <button class="px-2 py-1 rounded-md bg-white/5" onclick="localEmoji('💫')">💫</button>
-              <button class="px-2 py-1 rounded-md bg-white/5" onclick="localEmoji('🥁')">🥁</button>
-              <button class="px-2 py-1 rounded-md bg-white/5" onclick="localEmoji('🎵')">🎵</button>
-              <button class="px-2 py-1 rounded-md bg-white/5" onclick="localEmoji('👏')">👏</button>
-              <button class="px-2 py-1 rounded-md bg-white/5" onclick="localEmoji('🙌')">🙌</button>
-              <button class="px-2 py-1 rounded-md bg-white/5" onclick="localEmoji('❤️')">❤️</button>
-              <button class="px-2 py-1 rounded-md bg-white/5" onclick="localEmoji('💐')">💐</button>
-            </div>
-          </div>
-        </aside>
-
-      </div>
-    </div>
-  </main>
-
-  <!-- BOTTOM CONTROLS (centered) -->
-  <div class="fixed left-1/2 -translate-x-1/2 bottom-6 z-50 flex items-center gap-3 glass px-4 py-3 rounded-full">
-    <button id="btnMic" class="control-btn px-3 py-2 rounded-md bg-white/5">🎤</button>
-    <button id="btnCam" class="control-btn px-3 py-2 rounded-md bg-white/5">📷</button>
-    <button id="btnShare" class="control-btn px-3 py-2 rounded-md bg-white/5">🖥️</button>
-    <button id="btnRecord" class="px-3 py-2 rounded-md bg-orange-500 text-black font-semibold">⏺️</button>
-    <a id="btnLeave" href="#" class="px-3 py-2 rounded-md bg-red-600 text-white font-semibold">Leave</a>
+<header class="fixed inset-x-0 top-0 h-14 flex items-center px-4 glass z-40">
+  <div class="flex items-center gap-3">
+    <div class="text-2xl">📿</div>
+    <div class="text-lg font-semibold text-orange-400">AnantKripa Meet</div>
+    <div id="roomLabel" class="ml-4 text-sm text-slate-200/80"></div>
   </div>
+  <div class="ml-auto flex items-center gap-2">
+    <button id="btnToggleParticipants" class="hidden md:inline-flex px-3 py-1 rounded-md text-sm glass">Participants</button>
+    <button id="btnToggleChat" class="px-3 py-1 rounded-md text-sm glass">Chat</button>
+    <button id="btnToggleEmoji" class="px-3 py-1 rounded-md text-sm glass">Reactions</button>
+  </div>
+</header>
 
-  <!-- Donate modal -->
-  <div id="donateModal" class="fixed inset-0 z-60 hidden items-center justify-center bg-black/70">
-    <div class="bg-white text-black rounded-xl p-6 w-80 text-center">
-      <h3 class="font-bold text-lg mb-2">Support AnantKripa</h3>
-      <img src="assets/mobile.png" alt="QR" class="mx-auto w-48 rounded-lg">
-      <p class="mt-3 text-sm">Scan the QR to donate. Thank you!</p>
-      <div class="mt-4">
-        <button onclick="closeDonate()" class="px-4 py-2 rounded-md bg-orange-500 text-white">Close</button>
-      </div>
+<main class="pt-16 pb-32">
+  <div class="max-w-7xl mx-auto px-3">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <section id="videoArea" class="lg:col-span-2">
+        <div id="videos" class="grid gap-3 grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3"></div>
+      </section>
+
+      <aside class="space-y-4">
+        <div id="participants" class="glass p-3 rounded-xl max-h-[60vh] overflow-auto hidden md:block">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="font-semibold">👥 Participants</h3>
+            <span id="participantCount" class="text-sm text-slate-300">0</span>
+          </div>
+          <div id="usersList" class="space-y-2 text-sm"></div>
+        </div>
+
+        <div id="chatPanel" class="glass p-3 rounded-xl max-h-[40vh] overflow-hidden flex flex-col">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="font-semibold">💬 Chat</h3>
+            <button id="clearChat" class="text-xs text-slate-300">Clear</button>
+          </div>
+          <div id="messages" class="flex-1 overflow-auto text-sm space-y-2 mb-2"></div>
+          <div class="flex gap-2">
+            <input id="chatInput" class="flex-1 p-2 rounded-md text-black" placeholder="Type a message...">
+            <button id="sendChat" class="bg-orange-500 px-3 py-2 rounded-md font-semibold">Send</button>
+          </div>
+        </div>
+
+        <div class="glass p-3 rounded-xl space-y-2">
+          <div class="flex items-center justify-between">
+            <h3 class="font-semibold">✨ Reactions</h3>
+            <button id="openDonate" class="text-sm">💚 Donate</button>
+          </div>
+          <div id="emojiPanel" class="flex flex-wrap gap-2">
+            <button class="px-2 py-1 rounded-md bg-white/5" onclick="localEmoji('🪔')">🪔</button>
+            <button class="px-2 py-1 rounded-md bg-white/5" onclick="localEmoji('🌸')">🌸</button>
+            <button class="px-2 py-1 rounded-md bg-white/5" onclick="localEmoji('🙏')">🙏</button>
+            <button class="px-2 py-1 rounded-md bg-white/5" onclick="localEmoji('🔥')">🔥</button>
+            <button class="px-2 py-1 rounded-md bg-white/5" onclick="localEmoji('🎉')">🎉</button>
+            <button class="px-2 py-1 rounded-md bg-white/5" onclick="localEmoji('✨')">✨</button>
+            <button class="px-2 py-1 rounded-md bg-white/5" onclick="localEmoji('💖')">💖</button>
+            <button class="px-2 py-1 rounded-md bg-white/5" onclick="localEmoji('🌟')">🌟</button>
+            <button class="px-2 py-1 rounded-md bg-white/5" onclick="localEmoji('👏')">👏</button>
+            <button class="px-2 py-1 rounded-md bg-white/5" onclick="localEmoji('❤️')">❤️</button>
+          </div>
+        </div>
+      </aside>
     </div>
   </div>
+</main>
 
-  <!-- Waiting box -->
-  <div id="waitingBox" class="fixed left-1/2 -translate-x-1/2 top-20 z-60 hidden glass p-3 rounded-md">
-    Users waiting: <span id="waitingCount">0</span>
-    <button onclick="approveAll()" class="ml-3 px-2 py-1 bg-green-500 rounded-md">Approve All</button>
+<div class="fixed left-1/2 -translate-x-1/2 bottom-6 z-50 flex items-center gap-3 glass px-4 py-3 rounded-full">
+  <button id="btnMic" class="px-3 py-2 rounded-md bg-white/5">🎤</button>
+  <button id="btnCam" class="px-3 py-2 rounded-md bg-white/5">📷</button>
+  <button id="btnShare" class="px-3 py-2 rounded-md bg-white/5">🖥️</button>
+  <button id="btnRecord" class="px-3 py-2 rounded-md bg-orange-500 text-black font-semibold">⏺️</button>
+  <a id="btnLeave" href="/" class="px-3 py-2 rounded-md bg-red-600 text-white font-semibold">Leave</a>
+</div>
+
+<div id="donateModal" class="fixed inset-0 z-60 hidden items-center justify-center bg-black/70">
+  <div class="bg-white text-black rounded-xl p-6 w-80 text-center">
+    <h3 class="font-bold text-lg mb-2">Support AnantKripa</h3>
+    <img src="assets/mobile.png" alt="QR" class="mx-auto w-48 rounded-lg">
+    <p class="mt-3 text-sm">Scan the QR to donate. Thank you!</p>
+    <div class="mt-4"><button onclick="closeDonate()" class="px-4 py-2 rounded-md bg-orange-500 text-white">Close</button></div>
   </div>
+</div>
 
-  <!-- End overlay -->
-  <div id="endedOverlay" class="fixed inset-0 z-70 hidden items-center justify-center bg-black/80 text-white text-2xl p-6">
-    ❌ The host has ended the meeting. Thank you.
-  </div>
+<div id="waitingBox" class="fixed left-1/2 -translate-x-1/2 top-20 z-60 hidden glass p-3 rounded-md">
+  Users waiting: <span id="waitingCount">0</span>
+  <button onclick="approveAll()" class="ml-3 px-2 py-1 bg-green-500 rounded-md">Approve All</button>
+</div>
 
-  <!-- Hidden file input for screenshot upload -->
-  <input id="ssFile" type="file" accept="image/*" class="hidden">
+<div id="endedOverlay" class="fixed inset-0 z-70 hidden items-center justify-center bg-black/80 text-white text-2xl p-6">
+  ❌ The host has ended the meeting. Thank you.
+</div>
 
-  <!-- libs: socket + simple-peer (defer to avoid blocking) -->
-  <script defer src="/socket.io/socket.io.js"></script>
-  <script defer src="https://unpkg.com/simple-peer@9.11.1/simplepeer.min.js"></script>
+<input id="ssFile" type="file" accept="image/*" class="hidden">
 
-  <!-- MAIN SCRIPT (keeps your logic, adapted to new DOM & performance) -->
-  <script>
-  (() => {
+<!-- socket.io client from server -->
+<script defer src="/socket.io/socket.io.js"></script>
+<script defer src="https://unpkg.com/simple-peer@9.11.1/simplepeer.min.js"></script>
 
-    /* ====== CONFIG & PARAMS ====== */
-    const urlParams = new URLSearchParams(window.location.search);
-    const ROOM = (urlParams.get('room') || 'room-default').replace(/\s+/g,'-');
-    const NAME = urlParams.get('name') || ('Guest' + Math.floor(Math.random()*999));
-    const IS_HOST = (urlParams.get('host') === '1' || urlParams.get('host') === 'true');
-    const SERVER = location.origin;
-    document.getElementById('roomLabel').textContent = 'Room: ' + ROOM;
+<script>
+(() => {
+  // === CONFIG ===
+  const urlParams = new URLSearchParams(window.location.search);
+  const ROOM = (urlParams.get('room') || 'room-default').replace(/\s+/g,'-');
+  const NAME = urlParams.get('name') || ('Guest' + Math.floor(Math.random()*999));
+  const IS_HOST = (urlParams.get('host') === '1' || urlParams.get('host') === 'true');
+  const SERVER = location.origin; // should be same origin where server.js runs
 
-    const ICE_SERVERS = (function(){
-      try { return JSON.parse(decodeURIComponent(urlParams.get('ice') || '')) } catch(e){ return (window.__ICE || []) }
-    })();
+  document.getElementById('roomLabel').textContent = 'Room: ' + ROOM;
 
-    /* ====== SOCKET & STATE ====== */
-    const socket = io(SERVER, { transports: ['websocket','polling'] });
-    let localStream = null;
-    let peers = {};             // peerId -> SimplePeer
-    let peerVideoEls = {};      // peerId -> element
-    let peerNames = {};         // peerId -> {name, isHost}
-    let mediaRecorder = null;
-    let recordedChunks = [];
-
-    /* ====== UI & helpers ====== */
-    const videosWrap = document.getElementById('videos');
-    const usersList = document.getElementById('usersList');
-    const messagesEl = document.getElementById('messages');
-    const participantCount = document.getElementById('participantCount');
-    const waitingBox = document.getElementById('waitingBox');
-    const waitingCount = document.getElementById('waitingCount');
-
-    function escapeHtml(s){ if(!s) return ''; return String(s).replace(/[&<>"']/g, c=>'&#'+c.charCodeAt(0)+';'); }
-    function log(){} // use console.log if needed
-
-    /* ====== local media (getUserMedia) ====== */
-    async function initLocal() {
-      try {
-        localStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:true });
-        addVideoEl('local', localStream, NAME + (IS_HOST ? ' (Host)' : ' (You)'), true, IS_HOST, true);
-      } catch(err) {
-        console.error('getUserMedia error', err);
-        alert('Camera/microphone access required to join the meeting.');
-      }
+  // === STUN + TURN (Option A - included) ===
+  // NOTE: Replace TURN creds with your own production TURN for reliability if needed.
+  const ICE_SERVERS = [
+    { urls: "stun:stun.l.google.com:19302" },
+    {
+      urls: "turn:relay1.expressturn.com:3478",
+      username: "efX8qHDoXkq9NH1p2w",
+      credential: "uOY1qGL7eHzpGPqV"
     }
+  ];
 
-    /* ====== socket flow ====== */
-    socket.on('connect', () => {
-      if (IS_HOST) {
-        socket.emit('join-room', { room: ROOM, userName: NAME, host: true });
-      } else {
-        socket.emit('join-request', { room: ROOM, userName: NAME });
-      }
-    });
+  // === STATE ===
+  const socket = io(SERVER, { transports: ['websocket','polling'] });
+  let localStream = null;
+  let peers = {};        // peerId -> SimplePeer
+  let peerEls = {};      // peerId -> element
+  let peerNames = {};    // peerId -> {name,isHost}
+  let mediaRecorder = null;
+  let recordedChunks = [];
 
-    socket.on('peers', async (others) => {
-      if (!Array.isArray(others)) return;
-      const ids = [];
-      for (const o of others) {
-        if (typeof o === 'string') ids.push(o);
-        else if (o && o.id) {
-          ids.push(o.id);
-          peerNames[o.id] = { name: o.userName || o.name || 'Participant', isHost: !!o.isHost };
-        }
-      }
-      for (const id of ids) await preparePeer(id, true);
+  const videosWrap = document.getElementById('videos');
+  const usersList = document.getElementById('usersList');
+  const messagesEl = document.getElementById('messages');
+  const participantCount = document.getElementById('participantCount');
+  const waitingBox = document.getElementById('waitingBox');
+  const waitingCount = document.getElementById('waitingCount');
+
+  function escapeHtml(s){ if(!s) return ''; return String(s).replace(/[&<>"']/g, c=>'&#'+c.charCodeAt(0)+';'); }
+
+  // === getUserMedia and show preview ===
+  async function initLocal() {
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:true });
+      // show local tile
+      addVideo('local', localStream, NAME + (IS_HOST ? ' (Host)' : ' (You)'), true, IS_HOST, true);
+    } catch(err) {
+      console.error('getUserMedia error', err);
+      alert('Camera/mic access is required. Please allow permissions and reload the page.');
+    }
+  }
+
+  // === socket flow ===
+  socket.on('connect', () => {
+    if (IS_HOST) {
+      socket.emit('join-room', { room: ROOM, userName: NAME, host: true });
+    } else {
+      socket.emit('join-request', { room: ROOM, userName: NAME });
+    }
+  });
+
+  // peers list arrives as array of objects
+  socket.on('peers', async (others) => {
+    if (!Array.isArray(others)) return;
+    for (const o of others) {
+      const id = (typeof o === 'string') ? o : o.id;
+      if (!id) continue;
+      if (o && o.userName) peerNames[id] = { name: o.userName, isHost: !!o.isHost };
+      await preparePeer(id, true);
+    }
+    updateUsersList();
+  });
+
+  socket.on('peer-joined', async ({ id, userName, isHost }) => {
+    peerNames[id] = { name: userName || 'Participant', isHost: !!isHost };
+    await preparePeer(id, false);
+    updateUsersList();
+  });
+
+  socket.on('signal', ({ from, data }) => {
+    if (peers[from]) peers[from].signal(data);
+    else preparePeer(from, false, data);
+  });
+
+  socket.on('peer-left', ({ id }) => {
+    cleanupPeer(id);
+    delete peerNames[id];
+    updateUsersList();
+  });
+
+  socket.on('waiting-user', (list) => {
+    const cnt = (list && list.length) || 0;
+    waitingCount.textContent = cnt;
+    if (IS_HOST && cnt > 0) waitingBox.style.display = 'block';
+    else waitingBox.style.display = 'none';
+  });
+
+  socket.on('approved', (room) => {
+    if (room === ROOM) {
+      socket.emit('join-room', { room: ROOM, userName: NAME });
+    }
+  });
+
+  socket.on('meeting-ended', () => {
+    if (localStream) localStream.getTracks().forEach(t => t.stop());
+    document.getElementById('endedOverlay').style.display = 'flex';
+    setTimeout(()=> { try{ socket.disconnect(); } catch(e){} }, 1600);
+  });
+
+  // chat + emoji
+  socket.on('chat', ({ name, message }) => appendChat(name, message));
+  socket.on('emoji', ({ name, emoji }) => showFloatingEmoji(emoji, name));
+
+  // === WebRTC peers (simple-peer) ===
+  async function preparePeer(peerId, initiator=false, incomingSignal=null) {
+    if (peers[peerId]) return;
+    const p = new SimplePeer({ initiator, trickle: true, stream: localStream, config: { iceServers: ICE_SERVERS } });
+    peers[peerId] = p;
+
+    p.on('signal', data => socket.emit('signal', { to: peerId, data }));
+    p.on('stream', stream => {
+      const info = peerNames[peerId] || { name: 'Participant', isHost: false };
+      addVideo(peerId, stream, info.name + (info.isHost ? ' (Host)' : ''), false, info.isHost, false);
       updateUsersList();
     });
+    p.on('close', () => cleanupPeer(peerId));
+    p.on('error', e => { console.warn('peer error', e); cleanupPeer(peerId); });
 
-    socket.on('peer-joined', async ({ id, userName, isHost }) => {
-      peerNames[id] = { name: userName || 'Participant', isHost: !!isHost };
-      await preparePeer(id, false);
-      updateUsersList();
-    });
+    if (incomingSignal) p.signal(incomingSignal);
+  }
 
-    socket.on('signal', async ({ from, data }) => {
-      if (peers[from]) peers[from].signal(data);
-      else await preparePeer(from, false, data);
-    });
+  function cleanupPeer(id) {
+    const el = document.getElementById('card-' + id);
+    if (el) el.remove();
+    if (peers[id]) { try { peers[id].destroy(); } catch(e){} delete peers[id]; }
+    delete peerEls[id];
+  }
 
-    socket.on('peer-left', ({ id }) => {
-      removePeer(id);
-      delete peerNames[id];
-      updateUsersList();
-    });
-
-    socket.on('waiting-user', (list) => {
-      const cnt = (list && list.length) || 0;
-      waitingCount.textContent = cnt;
-      if (IS_HOST && cnt > 0) waitingBox.style.display = 'block';
-      else waitingBox.style.display = 'none';
-    });
-
-    socket.on('approved', (room) => {
-      if (room === ROOM) socket.emit('join-room', { room: ROOM, userName: NAME });
-    });
-
-    socket.on('meeting-ended', () => {
-      if (localStream) localStream.getTracks().forEach(t => t.stop());
-      document.getElementById('endedOverlay').style.display = 'flex';
-      setTimeout(()=> { try{ socket.disconnect(); }catch(e){} }, 1600);
-    });
-
-    // chat + emoji incoming from server
-    socket.on('chat', ({ name, message }) => {
-      appendChat(name, message);
-    });
-    socket.on('emoji', ({ name, emoji }) => {
-      showFloatingEmoji(emoji, name);
-    });
-
-    /* ====== prepare peer (simple-peer) ====== */
-    async function preparePeer(peerId, initiator=false, incomingSignal=null) {
-      if (peers[peerId]) return;
-      const iceConfig = ICE_SERVERS && ICE_SERVERS.length ? ICE_SERVERS : [{ urls: 'stun:stun.l.google.com:19302' }];
-      const p = new SimplePeer({ initiator, trickle: true, stream: localStream, config: { iceServers: iceConfig } });
-      peers[peerId] = p;
-
-      p.on('signal', data => socket.emit('signal', { to: peerId, data }));
-      p.on('stream', stream => {
-        const info = peerNames[peerId] || { name: 'Participant', isHost: false };
-        addVideoEl(peerId, stream, info.name + (info.isHost ? ' (Host)' : ''), false, info.isHost, false);
-        updateUsersList();
-      });
-      p.on('close', () => removePeer(peerId));
-      p.on('error', e => { console.warn('peer error', e); removePeer(peerId); });
-
-      if (incomingSignal) p.signal(incomingSignal);
+  // add video tile
+  function addVideo(id, stream, label, muted=false, isHost=false, isLocal=false) {
+    const existing = document.getElementById('card-' + id);
+    if (existing) {
+      const v = existing.querySelector('video');
+      if (v) v.srcObject = stream;
+      const nt = existing.querySelector('.nameTag');
+      if (nt) nt.textContent = label;
+      peerEls[id] = existing;
+      return;
     }
 
-    /* ====== add / remove video ====== */
-    function addVideoEl(id, stream, label, muted=false, isHost=false, isLocal=false) {
-      const existing = document.getElementById('card-' + id);
-      if (existing) {
-        const vid = existing.querySelector('video');
-        if (vid) vid.srcObject = stream;
-        const nameTag = existing.querySelector('.nameTag');
-        if (nameTag) nameTag.textContent = label;
-        peerVideoEls[id] = existing;
-        return;
+    const card = document.createElement('div');
+    card.className = 'video-el relative bg-black rounded-xl shadow';
+    card.id = 'card-' + id;
+    card.style.minHeight = isLocal ? '200px' : '160px';
+
+    const vid = document.createElement('video');
+    vid.autoplay = true; vid.playsInline = true; vid.muted = !!muted;
+    vid.srcObject = stream;
+    vid.className = 'w-full h-full rounded-xl';
+    card.appendChild(vid);
+
+    const overlay = document.createElement('div');
+    overlay.className = 'absolute left-3 bottom-3 flex items-center gap-2 bg-black/40 px-3 py-1 rounded-md';
+    overlay.innerHTML = (isHost ? '<span class="text-xs font-semibold bg-yellow-300 text-black px-2 rounded-full">Host</span>' : '') + `<span class="nameTag ml-2 text-sm">${escapeHtml(label)}</span>`;
+    card.appendChild(overlay);
+
+    videosWrap.appendChild(card);
+    peerEls[id] = card;
+    updateLayout();
+  }
+
+  // === chat ===
+  document.getElementById('sendChat').addEventListener('click', () => {
+    const v = document.getElementById('chatInput').value.trim();
+    if (!v) return;
+    socket.emit('send-chat', { room: ROOM, message: v });
+    appendChat(NAME, v);
+    document.getElementById('chatInput').value = '';
+  });
+  function appendChat(name, msg) {
+    const el = document.createElement('div');
+    el.className = 'text-sm';
+    el.innerHTML = `<b>${escapeHtml(name)}:</b> ${escapeHtml(msg)}`;
+    messagesEl.appendChild(el);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+  document.getElementById('clearChat').addEventListener('click', ()=> messagesEl.innerHTML = '');
+
+  // === emoji ===
+  function localEmoji(emoji) {
+    showFloatingEmoji(emoji, NAME);
+    socket.emit('send-emoji', { room: ROOM, emoji });
+  }
+  window.localEmoji = localEmoji;
+
+  function showFloatingEmoji(emoji, byName) {
+    const el = document.createElement('div');
+    el.className = 'floating-emoji';
+    el.textContent = emoji;
+    el.style.left = (Math.random()*60 + 20) + '%';
+    el.style.bottom = '110px';
+    document.body.appendChild(el);
+    requestAnimationFrame(()=> { el.style.transform = 'translateY(-260px)'; el.style.opacity = '0'; });
+    setTimeout(()=> el.remove(), 1800);
+
+    const t = document.createElement('div');
+    t.className = 'fixed top-16 left-1/2 -translate-x-1/2 bg-black/60 px-3 py-1 rounded-md';
+    t.style.zIndex = 80;
+    t.innerHTML = `<small><b>${escapeHtml(byName)}</b> reacted</small>`;
+    document.body.appendChild(t);
+    setTimeout(()=>t.remove(), 1600);
+  }
+
+  // === controls: mic/cam/screenshare/record ===
+  function toggleMic(){
+    if (!localStream) return;
+    const a = localStream.getAudioTracks()[0];
+    if (!a) return;
+    a.enabled = !a.enabled;
+    document.getElementById('btnMic').textContent = a.enabled ? '🎤' : '🔇';
+  }
+  function toggleCam(){
+    if (!localStream) return;
+    const v = localStream.getVideoTracks()[0];
+    if (!v) return;
+    v.enabled = !v.enabled;
+    document.getElementById('btnCam').textContent = v.enabled ? '📷' : '🚫';
+  }
+  async function startScreen(){
+    try {
+      const s = await navigator.mediaDevices.getDisplayMedia({ video:true });
+      const screenTrack = s.getVideoTracks()[0];
+      for (const id in peers) {
+        const pc = peers[id];
+        const sender = pc._pc && pc._pc.getSenders && pc._pc.getSenders().find(s => s.track && s.track.kind === 'video');
+        if (sender) sender.replaceTrack(screenTrack);
       }
-
-      // card
-      const card = document.createElement('div');
-      card.className = 'video-el relative bg-black rounded-xl shadow';
-      card.id = 'card-' + id;
-      card.style.minHeight = (isLocal ? '200px' : '160px');
-
-      // video
-      const vid = document.createElement('video');
-      vid.autoplay = true; vid.playsInline = true; vid.muted = !!muted;
-      vid.srcObject = stream;
-      vid.className = 'w-full h-full rounded-xl';
-
-      // overlay bottom for name & host badge
-      const overlay = document.createElement('div');
-      overlay.className = 'absolute left-3 bottom-3 flex items-center gap-2 bg-black/50 px-3 py-1 rounded-md';
-      overlay.innerHTML = (isHost ? '<span class="text-xs font-semibold bg-yellow-300 text-black px-2 rounded-full">Host</span>' : '') +
-                          `<span class="nameTag ml-2 text-sm">${escapeHtml(label)}</span>`;
-
-      card.appendChild(vid);
-      card.appendChild(overlay);
-      videosWrap.appendChild(card);
-      peerVideoEls[id] = card;
-
-      // responsive: keep grid tidy
-      updateLayout();
-    }
-
-    function removePeer(id) {
-      const el = document.getElementById('card-' + id);
-      if (el) el.remove();
-      if (peers[id]) { try { peers[id].destroy(); } catch(e){} delete peers[id]; }
-      delete peerVideoEls[id];
-      updateLayout();
-    }
-
-    /* ====== Chat functions ====== */
-    document.getElementById('sendChat').addEventListener('click', () => {
-      const v = document.getElementById('chatInput').value.trim();
-      if(!v) return;
-      socket.emit('send-chat', { room: ROOM, message: v });
-      appendChat(NAME, v);
-      document.getElementById('chatInput').value = '';
-    });
-    function appendChat(name, msg) {
-      const el = document.createElement('div');
-      el.className = 'text-sm';
-      el.innerHTML = `<b>${escapeHtml(name)}:</b> ${escapeHtml(msg)}`;
-      messagesEl.appendChild(el);
-      messagesEl.scrollTop = messagesEl.scrollHeight;
-    }
-    document.getElementById('clearChat').addEventListener('click', ()=> messagesEl.innerHTML = '');
-
-    /* ====== Emoji ====== */
-    function localEmoji(emoji) {
-      showFloatingEmoji(emoji, NAME);
-      socket.emit('send-emoji', { room: ROOM, emoji });
-    }
-    window.localEmoji = localEmoji; // expose
-
-    function showFloatingEmoji(emoji, byName) {
-      const el = document.createElement('div');
-      el.className = 'floating-emoji text-6xl';
-      el.textContent = emoji;
-      const left = (Math.random() * 50) + 20;
-      el.style.left = left + '%';
-      el.style.bottom = '110px';
-      document.body.appendChild(el);
-      requestAnimationFrame(()=> { el.style.transform = 'translateY(-260px)'; el.style.opacity = '0'; });
-      setTimeout(()=> el.remove(), 1800);
-
-      // small toast with name near top (optional)
-      const t = document.createElement('div');
-      t.className = 'fixed top-16 left-1/2 -translate-x-1/2 bg-black/60 px-3 py-1 rounded-md';
-      t.style.zIndex = 80;
-      t.innerHTML = `<small><b>${escapeHtml(byName)}</b> reacted</small>`;
-      document.body.appendChild(t);
-      setTimeout(()=>t.remove(), 1600);
-    }
-
-    /* ====== Controls: mic, cam, screen, record ====== */
-    async function toggleMic(){
-      if(!localStream) return;
-      const a = localStream.getAudioTracks()[0];
-      if(!a) return;
-      a.enabled = !a.enabled;
-      document.getElementById('btnMic').textContent = a.enabled ? '🎤' : '🔇';
-    }
-    async function toggleCam(){
-      if(!localStream) return;
-      const v = localStream.getVideoTracks()[0];
-      if(!v) return;
-      v.enabled = !v.enabled;
-      document.getElementById('btnCam').textContent = v.enabled ? '📷' : '🚫';
-    }
-    async function startScreen(){
-      try {
-        const s = await navigator.mediaDevices.getDisplayMedia({ video:true });
-        const screenTrack = s.getVideoTracks()[0];
+      addVideo('screen-local', s, NAME + ' (screen)', true, false, true);
+      screenTrack.onended = () => {
+        const cam = localStream.getVideoTracks()[0];
         for (const id in peers) {
           const pc = peers[id];
           const sender = pc._pc && pc._pc.getSenders && pc._pc.getSenders().find(s => s.track && s.track.kind === 'video');
-          if (sender) sender.replaceTrack(screenTrack);
+          if (sender && cam) sender.replaceTrack(cam);
         }
-        addVideoEl('screen-local', s, NAME + ' (screen)', true, false, true);
-        screenTrack.onended = () => {
-          const cam = localStream.getVideoTracks()[0];
-          for (const id in peers) {
-            const pc = peers[id];
-            const sender = pc._pc && pc._pc.getSenders && pc._pc.getSenders().find(s => s.track && s.track.kind === 'video');
-            if (sender && cam) sender.replaceTrack(cam);
-          }
-          const el = document.getElementById('card-screen-local'); if (el) el.remove();
-        };
-      } catch(e) {
-        console.warn('Screen share denied', e);
-      }
-    }
-
-    function toggleRecord(){
-      if (!mediaRecorder || mediaRecorder.state === 'inactive') startRecording();
-      else stopRecording();
-    }
-    function startRecording(){
-      if (!localStream) return alert('No local stream');
-      const combined = new MediaStream();
-      localStream.getTracks().forEach(t => combined.addTrack(t));
-      mediaRecorder = new MediaRecorder(combined, { mimeType: 'video/webm; codecs=vp8' });
-      recordedChunks = [];
-      mediaRecorder.ondataavailable = e => { if (e.data.size) recordedChunks.push(e.data); };
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(recordedChunks, { type: 'video/webm' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url; a.download = `${ROOM}_${Date.now()}.webm`; a.click();
-        URL.revokeObjectURL(url);
+        const el = document.getElementById('card-screen-local'); if (el) el.remove();
       };
-      mediaRecorder.start();
-      document.getElementById('btnRecord').textContent = '⏹️';
+    } catch(e) {
+      console.warn('Screen share denied', e);
     }
-    function stopRecording(){
-      if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
-      document.getElementById('btnRecord').textContent = '⏺️';
+  }
+
+  function toggleRecord(){
+    if (!mediaRecorder || mediaRecorder.state === 'inactive') startRecording();
+    else stopRecording();
+  }
+  function startRecording(){
+    if (!localStream) return alert('No local stream');
+    const combined = new MediaStream();
+    localStream.getTracks().forEach(t => combined.addTrack(t));
+    mediaRecorder = new MediaRecorder(combined, { mimeType: 'video/webm; codecs=vp8' });
+    recordedChunks = [];
+    mediaRecorder.ondataavailable = e => { if (e.data.size) recordedChunks.push(e.data); };
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(recordedChunks, { type: 'video/webm' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = `${ROOM}_${Date.now()}.webm`; a.click();
+      URL.revokeObjectURL(url);
+    };
+    mediaRecorder.start();
+    document.getElementById('btnRecord').textContent = '⏹️';
+  }
+  function stopRecording(){ if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop(); document.getElementById('btnRecord').textContent = '⏺️'; }
+
+  // screenshot upload hook (optional)
+  document.getElementById('ssFile').addEventListener('change', (e) => {
+    const f = e.target.files[0]; if (!f) return; uploadScreenshotFile(f);
+  });
+  async function uploadScreenshotFile(file) {
+    const fd = new FormData(); fd.append('screenshot', file); fd.append('room', ROOM);
+    try {
+      const res = await fetch('/upload_screenshot.php', { method:'POST', body:fd, credentials:'include' });
+      const j = await res.json();
+      if (j.success) alert('Uploaded'); else alert('Upload failed');
+    } catch(e) { alert('Upload error'); }
+  }
+
+  // approve all (host)
+  function approveAll() { socket.emit('approve-all', ROOM); waitingBox.style.display = 'none'; }
+  window.approveAll = approveAll;
+
+  // update user list UI
+  function updateUsersList() {
+    usersList.innerHTML = '';
+    participantCount.textContent = Object.keys(peerEls).length;
+    usersList.insertAdjacentHTML('beforeend', `<div class="flex items-center justify-between p-2 rounded-md bg-white/3"><div><b>${escapeHtml(NAME)}</b><div class="text-xs text-slate-300">${IS_HOST? 'Host':''}</div></div></div>`);
+    for (const id in peerNames) {
+      const info = peerNames[id] || { name: id, isHost:false };
+      const label = escapeHtml(info.name) + (info.isHost ? ' (Host)' : '');
+      usersList.insertAdjacentHTML('beforeend', `<div class="flex items-center justify-between p-2 rounded-md bg-white/3">${label}</div>`);
+    }
+  }
+
+  function updateLayout() {
+    const count = Object.keys(peerEls).length;
+    let cols = 1;
+    if (count <= 1) cols = 1;
+    else if (count === 2) cols = 2;
+    else if (count <= 4) cols = 2;
+    else if (count <= 6) cols = 3;
+    else cols = 4;
+    videosWrap.style.gridTemplateColumns = `repeat(${cols}, minmax(0,1fr))`;
+  }
+
+  // === init ===
+  (async function start(){
+    try { await initLocal(); } catch(e){ console.warn(e); }
+
+    if (!IS_HOST) {
+      const notice = document.createElement('div');
+      notice.id = 'waitingNotice';
+      notice.className = 'fixed top-16 left-1/2 -translate-x-1/2 bg-black/60 px-3 py-2 rounded-md';
+      notice.style.zIndex = 80;
+      notice.textContent = 'Waiting for host approval...';
+      document.body.appendChild(notice);
     }
 
-    /* ====== screenshot upload ====== */
-    document.getElementById('ssFile').addEventListener('change', (e) => {
-      const f = e.target.files[0]; if (!f) return; uploadScreenshotFile(f);
+    setInterval(updateUsersList, 1000);
+
+    document.getElementById('btnMic').addEventListener('click', toggleMic);
+    document.getElementById('btnCam').addEventListener('click', toggleCam);
+    document.getElementById('btnShare').addEventListener('click', startScreen);
+    document.getElementById('btnRecord').addEventListener('click', toggleRecord);
+    document.getElementById('btnLeave').addEventListener('click', () => { socket.emit('leave-room', ROOM); window.location.href = '/'; });
+
+    document.getElementById('btnToggleChat').addEventListener('click', ()=> {
+      const el = document.getElementById('chatPanel'); el.style.display = (el.style.display === 'none' || el.style.display === '') ? 'block' : 'none';
     });
-    async function uploadScreenshotFile(file){
-      const fd = new FormData(); fd.append('screenshot', file); fd.append('room', ROOM);
-      try {
-        const res = await fetch('/upload_screenshot.php', { method:'POST', body:fd, credentials:'include' });
-        const j = await res.json();
-        if (j.success) alert('Uploaded'); else alert('Upload failed');
-      } catch(e) { alert('Upload error'); }
-    }
+    document.getElementById('btnToggleParticipants').addEventListener('click', ()=> {
+      const el = document.getElementById('participants'); el.style.display = (el.style.display === 'none' || el.style.display === '') ? 'block' : 'none';
+    });
+    document.getElementById('btnToggleEmoji').addEventListener('click', ()=> {
+      const el = document.getElementById('emojiPanel'); el.style.display = (el.style.display === 'none' || el.style.display === '') ? 'flex' : 'none';
+    });
 
-    /* ====== waiting room actions (host) ====== */
-    function approveAll(){ socket.emit('approve-all', ROOM); waitingBox.style.display='none'; }
-
-    /* ====== update users list ====== */
-    function updateUsersList(){
-      usersList.innerHTML = '';
-      participantCount.textContent = Object.keys(peerVideoEls).length;
-      // local first
-      const localHtml = `<div class="flex items-center justify-between p-2 rounded-md bg-white/3"><div><b>${escapeHtml(NAME)}</b> <div class="text-xs text-slate-300">${IS_HOST? 'Host':''}</div></div></div>`;
-      usersList.insertAdjacentHTML('beforeend', localHtml);
-      for (const id in peerNames) {
-        const info = peerNames[id] || { name: id, isHost:false };
-        const label = escapeHtml(info.name) + (info.isHost ? ' (Host)' : '');
-        usersList.insertAdjacentHTML('beforeend', `<div class="flex items-center justify-between p-2 rounded-md bg-white/3">${label}</div>`);
-      }
-    }
-
-    /* ====== helpers & layout ====== */
-    function updateLayout(){
-      // adapt grid columns based on number of videos for nicer google-meet style
-      const count = Object.keys(peerVideoEls).length;
-      let cols = 1;
-      if (count <= 1) cols = 1;
-      else if (count === 2) cols = 2;
-      else if (count <= 4) cols = 2;
-      else if (count <= 6) cols = 3;
-      else cols = 4;
-      videosWrap.style.gridTemplateColumns = `repeat(${cols}, minmax(0,1fr))`;
-    }
-
-    /* ====== remove peer ====== */
-    function removePeerElement(id) { removePeer(id); updateUsersList(); }
-
-    /* ====== start everything (initialization) ====== */
-    (async function start(){
-      try {
-        await initLocal();
-      } catch(e){ console.warn(e); }
-
-      // if guest show waiting notice
-      if (!IS_HOST) {
-        const notice = document.createElement('div');
-        notice.id = 'waitingNotice';
-        notice.className = 'fixed top-16 left-1/2 -translate-x-1/2 bg-black/60 px-3 py-2 rounded-md';
-        notice.style.zIndex = 80;
-        notice.textContent = 'Waiting for host approval...';
-        document.body.appendChild(notice);
-      }
-
-      // update list occasionally (some data arrives later)
-      setInterval(updateUsersList, 1000);
-
-      // attach bottom control handlers
-      document.getElementById('btnMic').addEventListener('click', toggleMic);
-      document.getElementById('btnCam').addEventListener('click', toggleCam);
-      document.getElementById('btnShare').addEventListener('click', startScreen);
-      document.getElementById('btnRecord').addEventListener('click', toggleRecord);
-      document.getElementById('btnLeave').addEventListener('click', () => { socket.emit('leave-room', ROOM); window.location.href = '/'; });
-
-      // toggles
-      document.getElementById('btnToggleChat').addEventListener('click', ()=> {
-        const el = document.getElementById('chatPanel');
-        el.style.display = (el.style.display === 'none' || el.style.display === '') ? 'block' : 'none';
-      });
-      document.getElementById('btnToggleParticipants').addEventListener('click', ()=> {
-        const el = document.getElementById('participants');
-        el.style.display = (el.style.display === 'none' || el.style.display === '') ? 'block' : 'none';
-      });
-      document.getElementById('btnToggleEmoji').addEventListener('click', ()=> {
-        const el = document.getElementById('emojiPanel');
-        el.style.display = (el.style.display === 'none' || el.style.display === '') ? 'flex' : 'none';
-      });
-
-      // donate modal
-      document.getElementById('openDonate').addEventListener('click', ()=> document.getElementById('donateModal').style.display = 'flex');
-      document.getElementById('donateModal').addEventListener('click', (e)=> { if (e.target === document.getElementById('donateModal')) closeDonate(); });
-
-    })();
-
-    /* ====== modal helpers ====== */
-    window.openDonate = function(){ document.getElementById('donateModal').style.display = 'flex'; };
-    window.closeDonate = function(){ document.getElementById('donateModal').style.display = 'none'; };
-
-    /* ====== Expose some functions to global (optional) ====== */
-    window.approveAll = approveAll;
-    window.updateUsersList = updateUsersList;
+    document.getElementById('openDonate').addEventListener('click', ()=> document.getElementById('donateModal').style.display = 'flex');
+    document.getElementById('donateModal').addEventListener('click', (e)=> { if (e.target === document.getElementById('donateModal')) closeDonate(); });
 
   })();
-  </script>
+
+  window.closeDonate = function(){ document.getElementById('donateModal').style.display = 'none'; };
+  window.updateUsersList = updateUsersList;
+
+})();
+</script>
 </body>
-  </html>
 </html>
