@@ -1,27 +1,40 @@
-// ===============================
-//  AnantKripa Signaling Server
-// ===============================
+// =========================================
+//  🚀 AnantKripa WebRTC Signaling Server
+// =========================================
 
 const express = require("express");
+const path = require("path");
 const app = express();
+
 const http = require("http").createServer(app);
-
-// ⭐ IMPORTANT: SERVE PUBLIC FOLDER
-app.use(express.static("public"));
-
 const io = require("socket.io")(http, {
-  cors: { origin: "*", methods: ["GET", "POST"] }
+  cors: { origin: "*" }
 });
 
+// Serve static files (meeting.html, assets, etc.)
+app.use(express.static(path.join(__dirname, "public")));
+
+// Test route
+app.get("/", (req, res) => {
+  res.send("🔥 AnantKripa Meet Signaling Server is Running...");
+});
+
+// Rooms structure
 let rooms = {};
+// rooms = {
+//   roomName: {
+//     host: socketId,
+//     waiting: [{id, name}],
+//     users: { socketId: {name, isHost} }
+//   }
+// };
 
 io.on("connection", (socket) => {
+  console.log("⚡ User connected:", socket.id);
 
-  console.log("User connected:", socket.id);
-
-  // ---------------------------
-  // Guest Waiting Room
-  // ---------------------------
+  // -------------------------------
+  // Guest requests to join a room
+  // -------------------------------
   socket.on("join-request", ({ room, userName }) => {
 
     if (!rooms[room]) {
@@ -32,45 +45,56 @@ io.on("connection", (socket) => {
       };
     }
 
+    // Guest goes to waiting room
     rooms[room].waiting.push({ id: socket.id, name: userName });
 
+    // Notify host if exists
     if (rooms[room].host) {
       io.to(rooms[room].host).emit("waiting-user", rooms[room].waiting);
     }
+
+    console.log(`👤 Guest requested to join room: ${room}`);
   });
 
-  // ---------------------------
-  // Host or Approved Guest Joins
-  // ---------------------------
+  // -------------------------------
+  // Host or approved guest joins
+  // -------------------------------
   socket.on("join-room", ({ room, userName, host }) => {
 
     if (!rooms[room]) {
-      rooms[room] = { host: null, waiting: [], users: {} };
+      rooms[room] = {
+        host: null,
+        waiting: [],
+        users: {}
+      };
     }
 
-    if (host) rooms[room].host = socket.id;
+    // Mark host
+    if (host) {
+      rooms[room].host = socket.id;
+    }
 
     rooms[room].users[socket.id] = { name: userName, isHost: !!host };
-
     socket.join(room);
 
-    const peerIds = Object.keys(rooms[room].users).filter(id => id !== socket.id);
-    socket.emit("peers", peerIds);
+    // Send list of existing peers to this new user
+    const peers = Object.keys(rooms[room].users).filter(id => id !== socket.id);
+    socket.emit("peers", peers);
 
+    // Notify others in the room
     socket.to(room).emit("peer-joined", {
       id: socket.id,
       userName,
       isHost: !!host
     });
 
-    console.log(`${userName} joined → ${room}`);
+    console.log(`✅ ${userName} joined room: ${room} (Host: ${host})`);
   });
 
-  // ---------------------------
-  // Host approves all guests
-  // ---------------------------
+  // -------------------------------
+  // Host approves all waiting users
+  // -------------------------------
   socket.on("approve-all", (room) => {
-
     if (!rooms[room]) return;
 
     rooms[room].waiting.forEach(g => {
@@ -79,69 +103,78 @@ io.on("connection", (socket) => {
 
     rooms[room].waiting = [];
 
+    // Update host waiting UI
     io.to(rooms[room].host).emit("waiting-user", []);
   });
 
-  // ---------------------------
-  // WebRTC Signaling
-  // ---------------------------
+  // -------------------------------
+  // WebRTC signaling exchange
+  // -------------------------------
   socket.on("signal", ({ to, data }) => {
     io.to(to).emit("signal", { from: socket.id, data });
   });
 
-  // ---------------------------
-  // Chat
-  // ---------------------------
+  // -------------------------------
+  // Chat system
+  // -------------------------------
   socket.on("send-chat", ({ room, message }) => {
-    const user = rooms[room]?.users[socket.id]?.name || "User";
-    io.to(room).emit("chat", { name: user, message });
+    const sender = rooms[room]?.users[socket.id]?.name || "User";
+    io.to(room).emit("chat", { name: sender, message });
   });
 
-  // ---------------------------
-  // Emoji
-  // ---------------------------
+  // -------------------------------
+  // Emoji reaction system
+  // -------------------------------
   socket.on("send-emoji", ({ room, emoji }) => {
-    const user = rooms[room]?.users[socket.id]?.name || "User";
-    io.to(room).emit("emoji", { name: user, emoji });
+    const sender = rooms[room]?.users[socket.id]?.name || "User";
+    io.to(room).emit("emoji", { name: sender, emoji });
   });
 
-  // ---------------------------
-  // Leave room
-  // ---------------------------
+  // -------------------------------
+  // User leaves room
+  // -------------------------------
   socket.on("leave-room", (room) => {
-    handleLeave(socket, room);
+    handleDisconnect(socket, room);
   });
 
-  // ---------------------------
-  // Disconnect
-  // ---------------------------
+  // -------------------------------
+  // Disconnect event
+  // -------------------------------
   socket.on("disconnect", () => {
-
     for (const room in rooms) {
       if (rooms[room].users[socket.id]) {
-        handleLeave(socket, room);
+        handleDisconnect(socket, room);
       }
     }
   });
 
-  function handleLeave(socket, room) {
-
+  // -------------------------------
+  // Disconnect helper
+  // -------------------------------
+  function handleDisconnect(socket, room) {
     if (!rooms[room]) return;
 
+    const user = rooms[room].users[socket.id];
     delete rooms[room].users[socket.id];
 
+    // Notify others
     socket.to(room).emit("peer-left", { id: socket.id });
 
+    // If host leaves → end meeting for everyone
     if (rooms[room].host === socket.id) {
       io.to(room).emit("meeting-ended");
       delete rooms[room];
-      console.log("Meeting ended:", room);
+      console.log(`❌ Host left. Meeting ended: ${room}`);
     }
 
     socket.leave(room);
   }
 });
 
-http.listen(3000, () => {
-  console.log("🚀 Server running on http://localhost:3000");
+// -------------------------------
+// Start Server
+// -------------------------------
+const PORT = process.env.PORT || 3000;
+http.listen(PORT, () => {
+  console.log("🚀 Server running on port " + PORT);
 });
