@@ -1,15 +1,16 @@
 // ===============================
-//  AnantKripa Signaling Server (FIXED)
+//  AnantKripa Signaling Server
 // ===============================
 
 const express = require("express");
 const app = express();
 const http = require("http").createServer(app);
 
-app.use(express.static("public"));   // ⭐ FIX #1 — SERVE PUBLIC FILES
+// ⭐ IMPORTANT: SERVE PUBLIC FOLDER
+app.use(express.static("public"));
 
 const io = require("socket.io")(http, {
-  cors: { origin: "*" }
+  cors: { origin: "*", methods: ["GET", "POST"] }
 });
 
 let rooms = {};
